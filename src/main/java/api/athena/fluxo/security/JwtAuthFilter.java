@@ -47,7 +47,12 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
                 String email = (String) claims.get("sub");
                 String role = (String) claims.get("role");
-                Long userId = ((Number) claims.get("userId")).longValue();
+                Object userIdObj = claims.get("userId");
+                if (userIdObj == null) {
+                    log.error("Token JWT inválido: userId não encontrado nos claims");
+                    return;
+                }
+                Long userId = ((Number) userIdObj).longValue();
 
                 // Criar authorities baseado na role
                 List<SimpleGrantedAuthority> authorities = List.of(
