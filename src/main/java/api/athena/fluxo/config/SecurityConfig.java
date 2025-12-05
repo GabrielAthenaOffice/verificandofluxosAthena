@@ -31,8 +31,7 @@ public class SecurityConfig {
         return http
                 .csrf(AbstractHttpConfigurer::disable)
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
-                .sessionManagement(session ->
-                        session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         // Endpoints públicos
                         .requestMatchers("/health", "/actuator/**").permitAll()
@@ -51,8 +50,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.DELETE, "/api/fluxos/**")
                         .hasAnyRole("ADMIN", "LIDER_DE_SETOR")
 
-                        .anyRequest().authenticated()
-                )
+                        .anyRequest().authenticated())
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
                 .build();
     }
@@ -60,7 +58,11 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOriginPatterns(List.of("https://frontzapzapinterno.vercel.app/"));
+        // IMPORTANTE: URLs de origem NÃO devem ter barra final
+        configuration.setAllowedOriginPatterns(List.of(
+                "https://frontzapzapinterno.vercel.app",
+                "http://localhost:*",
+                "http://127.0.0.1:*"));
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("*"));
         configuration.setAllowCredentials(true);
