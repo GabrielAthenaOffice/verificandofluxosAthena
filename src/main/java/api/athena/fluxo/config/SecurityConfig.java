@@ -39,7 +39,8 @@ public class SecurityConfig {
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**").permitAll()
                         .requestMatchers("/api/debug/**").permitAll()
 
-                        // Visualização de fluxos (autenticado)
+                        // Visualização de fluxos e arquivos estáticos (autenticado)
+                        // Permite acesso quando há token válido (via JwtAuthFilter)
                         .requestMatchers(HttpMethod.GET, "/api/fluxos/**").authenticated()
 
                         // Publicação (ADMIN, LIDER_DE_SETOR, FUNCIONARIO)

@@ -162,6 +162,31 @@ public class ArquivoService {
     }
 
     /**
+     * Baixa o conteúdo de um arquivo do Supabase usando a URL assinada.
+     * Útil para fazer proxy do conteúdo e servir com MIME type correto.
+     */
+    public byte[] downloadFromSupabase(String signedUrl) throws IOException {
+        Request request = new Request.Builder()
+                .url(signedUrl)
+                .get()
+                .build();
+
+        try (Response response = httpClient.newCall(request).execute()) {
+            if (!response.isSuccessful()) {
+                String errorBody = response.body() != null ? response.body().string() : "Sem detalhes";
+                log.error("Erro ao baixar arquivo do Supabase. Status: {}, Body: {}", response.code(), errorBody);
+                throw new IOException("Falha ao baixar arquivo do Supabase: " + response.code());
+            }
+
+            if (response.body() == null) {
+                throw new IOException("Resposta vazia do Supabase");
+            }
+
+            return response.body().bytes();
+        }
+    }
+
+    /**
      * Deleta um arquivo do Supabase Storage.
      */
     public void deletarDoSupabase(String path) throws IOException {

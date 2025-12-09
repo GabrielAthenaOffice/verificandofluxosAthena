@@ -19,6 +19,7 @@ import java.io.IOException;
 import java.net.URI;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 /**
@@ -204,6 +205,106 @@ public class ArquivoController {
 
                 } catch (Exception e) {
                         log.error("Erro ao servir arquivo: {}", e.getMessage());
+                        return ResponseEntity.notFound().build();
+                }
+        }
+
+        /**
+         * Serve arquivos estáticos diretamente pelo fluxo (compatibilidade com HTML do Bizagi).
+         * 
+         * Este endpoint aceita requisições no formato: /api/fluxos/{fluxoId}/libs/...
+         * ou /api/fluxos/{fluxoId}/** (exceto /visualizar) e tenta encontrar o arquivo na versão mais recente.
+         * 
+         * Exemplo: /api/fluxos/2/libs/js/app.bizagi.min.js
+         * 
+         * IMPORTANTE: Este endpoint deve vir ANTES do endpoint /visualizar para evitar conflitos.
+         */
+        @GetMapping(value = {"/fluxos/{fluxoId}/libs/**", "/fluxos/{fluxoId}/key.json.js", "/fluxos/{fluxoId}/configuration.json.js"})
+        @Operation(summary = "Acessar arquivo estático do fluxo", description = "Serve arquivos estáticos (JS, CSS, etc.) do fluxo usando a versão mais recente")
+        public ResponseEntity<?> getArquivoEstatico(
+                        @PathVariable Long fluxoId,
+                        jakarta.servlet.http.HttpServletRequest request) {
+
+                try {
+                        // Extrair o caminho relativo do arquivo
+                        String fullPath = request.getRequestURI();
+                        String basePath = String.format("/api/fluxos/%d/", fluxoId);
+                        String relativePath = fullPath.substring(fullPath.indexOf(basePath) + basePath.length());
+
+                        log.debug("Buscando arquivo estático: fluxoId={}, path={}", fluxoId, relativePath);
+
+                        // Buscar a versão mais recente do fluxo
+                        List<Versao> versoes = versaoRepository.findByFluxoIdOrderByNumeroDesc(fluxoId);
+                        if (versoes.isEmpty()) {
+                                log.warn("Nenhuma versão encontrada para o fluxo {}", fluxoId);
+                                return ResponseEntity.notFound().build();
+                        }
+
+                        Versao versao = versoes.get(0);
+
+                        // Buscar o arquivo pelo nome original (tentar match exato primeiro)
+                        Optional<Arquivo> arquivoExato = arquivoRepository.findByVersaoId(versao.getId()).stream()
+                                        .filter(a -> a.getNomeOriginal().equals(relativePath) ||
+                                                        a.getNomeOriginal().endsWith("/" + relativePath))
+                                        .findFirst();
+
+                        Arquivo arquivo;
+                        if (arquivoExato.isPresent()) {
+                                arquivo = arquivoExato.get();
+                        } else {
+                                // Tentar busca parcial como fallback
+                                arquivo = arquivoRepository.findByVersaoIdAndNomeOriginalContaining(
+                                                versao.getId(), relativePath)
+                                                .orElseThrow(() -> new IllegalArgumentException(
+                                                                "Arquivo não encontrado: " + relativePath));
+                        }
+
+                        // Determinar MIME type
+                        String mimeType = arquivo.getMimeType();
+                        if (mimeType == null || mimeType.isEmpty()) {
+                                // Detectar MIME type pela extensão
+                                String fileName = arquivo.getNomeOriginal().toLowerCase();
+                                if (fileName.endsWith(".js")) {
+                                        mimeType = "application/javascript";
+                                } else if (fileName.endsWith(".css")) {
+                                        mimeType = "text/css";
+                                } else if (fileName.endsWith(".json")) {
+                                        mimeType = "application/json";
+                                } else {
+                                        mimeType = "application/octet-stream";
+                                }
+                        }
+
+                        // Para arquivos pequenos (JS, CSS, JSON), servir diretamente para garantir MIME type correto
+                        // Para arquivos grandes, redirecionar para o Supabase
+                        long tamanho = arquivo.getTamanhoBytes() != null ? arquivo.getTamanhoBytes() : 0;
+                        boolean servirDiretamente = tamanho > 0 && tamanho < 5 * 1024 * 1024; // 5MB
+
+                        if (servirDiretamente) {
+                                try {
+                                        String signedUrl = arquivoService.getSignedUrl(arquivo.getCaminhoSupabase());
+                                        byte[] conteudo = arquivoService.downloadFromSupabase(signedUrl);
+
+                                        return ResponseEntity.ok()
+                                                        .contentType(MediaType.parseMediaType(mimeType))
+                                                        .header("Cache-Control", "public, max-age=3600")
+                                                        .body(conteudo);
+                                } catch (IOException e) {
+                                        log.warn("Erro ao servir arquivo diretamente, redirecionando: {}", e.getMessage());
+                                        // Fallback para redirecionamento
+                                }
+                        }
+
+                        // Redirecionar para a URL assinada
+                        String signedUrl = arquivoService.getSignedUrl(arquivo.getCaminhoSupabase());
+                        return ResponseEntity.status(HttpStatus.FOUND)
+                                        .header("Content-Type", mimeType)
+                                        .location(URI.create(signedUrl))
+                                        .build();
+
+                } catch (Exception e) {
+                        log.error("Erro ao servir arquivo estático: fluxoId={}, path={}, error={}", 
+                                        fluxoId, request.getRequestURI(), e.getMessage());
                         return ResponseEntity.notFound().build();
                 }
         }
