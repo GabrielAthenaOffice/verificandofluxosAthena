@@ -36,6 +36,7 @@ public class SecurityConfig {
                         // Endpoints públicos
                         .requestMatchers("/health", "/actuator/**").permitAll()
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**").permitAll()
+                        .requestMatchers("/api/debug/**").permitAll()
 
                         // Visualização de fluxos (autenticado)
                         .requestMatchers(HttpMethod.GET, "/api/fluxos/**").authenticated()
