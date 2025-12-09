@@ -42,6 +42,14 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                 jwt = extractJwtFromCookie(request);
             }
 
+            // Se ainda não encontrou, tenta do parâmetro da URL (útil para iframes)
+            if (jwt == null) {
+                jwt = request.getParameter("token");
+                if (jwt != null) {
+                    log.debug("Token JWT encontrado no parâmetro 'token'");
+                }
+            }
+
             if (jwt != null && tokenValidator.validateToken(jwt)) {
                 Map<String, Object> claims = tokenValidator.extractClaims(jwt);
 
