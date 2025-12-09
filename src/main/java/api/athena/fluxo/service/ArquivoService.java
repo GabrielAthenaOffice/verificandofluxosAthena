@@ -82,7 +82,7 @@ public class ArquivoService {
             throws IOException {
         // Gerar nome único para evitar colisões
         String uniqueFileName = generateUniqueName(fileName);
-        String path = String.format("fluxos/%s/%s", fluxoCodigo, uniqueFileName);
+        String path = String.format("fluxos-arquivos/fluxos/%s/%s", fluxoCodigo, uniqueFileName);
 
         String uploadUrl = String.format("%s/storage/v1/object/%s/%s",
                 supabaseUrl, bucketName, path);
