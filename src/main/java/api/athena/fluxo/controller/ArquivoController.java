@@ -319,15 +319,36 @@ public class ArquivoController {
          * 
          * Este é o endpoint principal para visualizar um fluxo no navegador.
          * 
-         * Exemplo: GET /api/fluxos/1/visualizar
-         * GET /api/fluxos/1/visualizar?versao=2
+         * IMPORTANTE: Se um token JWT for fornecido via query parameter (?token=...),
+         * este endpoint cria um cookie HTTP-only para que as requisições subsequentes
+         * de recursos estáticos (JS, CSS) funcionem automaticamente.
+         * 
+         * Exemplo: GET /api/fluxos/1/visualizar?token=eyJhbGci...
+         * GET /api/fluxos/1/visualizar?versao=2&token=eyJhbGci...
          */
         @GetMapping(value = "/fluxos/{fluxoId}/visualizar", produces = MediaType.TEXT_HTML_VALUE)
         @Operation(summary = "Visualizar fluxo", description = "Retorna o HTML do fluxo com todos os recursos (CSS, JS, imagens) corretamente referenciados")
         public ResponseEntity<String> visualizarFluxo(
                         @PathVariable Long fluxoId,
-                        @RequestParam(required = false) Integer versao) {
+                        @RequestParam(required = false) Integer versao,
+                        @RequestParam(required = false) String token,
+                        jakarta.servlet.http.HttpServletResponse response) {
                 try {
+                        // Se um token foi fornecido na URL, criar um cookie para as requisições subsequentes
+                        // Isso permite que os recursos estáticos (JS, CSS) sejam carregados automaticamente
+                        // sem precisar incluir o token em cada URL
+                        if (token != null && !token.isEmpty()) {
+                                log.debug("Token encontrado na URL, criando cookie 'athenaoffice' para requisições subsequentes");
+                                
+                                // SameSite=None é necessário para funcionar em iframes cross-origin
+                                // Secure é obrigatório quando SameSite=None
+                                response.addHeader("Set-Cookie", 
+                                        String.format("athenaoffice=%s; Path=/; HttpOnly; Secure; SameSite=None; Max-Age=%d",
+                                                token, 3600));
+                                
+                                log.debug("Cookie 'athenaoffice' criado com sucesso (expira em 1 hora)");
+                        }
+
                         String htmlRenderizado = htmlRenderService.renderizarFluxo(fluxoId, versao);
 
                         return ResponseEntity.ok()
