@@ -4,12 +4,13 @@ import lombok.Getter;
 
 @Getter
 public enum TipoArquivo {
-    HTML("HTML/Bizagi"),
+    HTML("HTML"),
     PDF("PDF"),
     ZIP("ZIP"),
     IMAGEM("Imagem"),
     CSS("CSS"),
     JAVASCRIPT("JavaScript"),
+    DOCUMENTO("Documento"),
     OUTRO("Outro");
 
     private final String descricao;

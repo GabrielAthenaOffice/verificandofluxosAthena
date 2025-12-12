@@ -5,10 +5,12 @@ import api.athena.fluxo.dto.FluxoResponseDTO;
 import api.athena.fluxo.model.entities.Fluxo;
 import api.athena.fluxo.model.entities.Setor;
 import api.athena.fluxo.model.entities.Versao;
+import api.athena.fluxo.model.entities.Arquivo;
 import api.athena.fluxo.model.enums.StatusFluxo;
 import api.athena.fluxo.repositories.FluxoRepository;
 import api.athena.fluxo.repositories.SetorRepository;
 import api.athena.fluxo.repositories.VersaoRepository;
+import api.athena.fluxo.repositories.ArquivoRepository;
 import api.athena.fluxo.security.UserPrincipal;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -19,8 +21,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Service
@@ -31,13 +35,14 @@ public class FluxoService {
     private final FluxoRepository fluxoRepository;
     private final SetorRepository setorRepository;
     private final VersaoRepository versaoRepository;
+    private final ArquivoRepository arquivoRepository;
     private final ZipProcessorService zipProcessorService;
     private final ArquivoService arquivoService;
 
     @Transactional
     public FluxoResponseDTO publicarFluxo(FluxoCreateDTO dto,
-                                          MultipartFile arquivo,
-                                          UserPrincipal usuario) {
+            MultipartFile arquivo,
+            UserPrincipal usuario) {
 
         log.info("Publicando fluxo: {} por usuário {}", dto.getTitulo(), usuario.getEmail());
 
@@ -85,9 +90,9 @@ public class FluxoService {
 
     @Transactional(readOnly = true)
     public Page<FluxoResponseDTO> listarFluxos(String setorCodigo,
-                                               StatusFluxo status,
-                                               String busca,
-                                               Pageable pageable) {
+            StatusFluxo status,
+            String busca,
+            Pageable pageable) {
 
         Page<Fluxo> fluxos;
 
@@ -118,8 +123,8 @@ public class FluxoService {
 
     @Transactional
     public FluxoResponseDTO atualizarStatus(Long id,
-                                            StatusFluxo novoStatus,
-                                            UserPrincipal usuario) {
+            StatusFluxo novoStatus,
+            UserPrincipal usuario) {
 
         Fluxo fluxo = fluxoRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Fluxo não encontrado"));
@@ -156,9 +161,9 @@ public class FluxoService {
 
     @Transactional
     public FluxoResponseDTO publicarNovaVersao(Long fluxoId,
-                                               MultipartFile arquivo,
-                                               String observacoes,
-                                               UserPrincipal usuario) {
+            MultipartFile arquivo,
+            String observacoes,
+            UserPrincipal usuario) {
 
         Fluxo fluxo = fluxoRepository.findById(fluxoId)
                 .orElseThrow(() -> new IllegalArgumentException("Fluxo não encontrado"));
@@ -218,6 +223,46 @@ public class FluxoService {
         dto.setTags(fluxo.getTags());
         dto.setCriadoEm(fluxo.getCriadoEm());
         dto.setAtualizadoEm(fluxo.getAtualizadoEm());
+
+        // Buscar URL do documento principal
+        try {
+            dto.setDocumentoUrl(buscarUrlDocumentoPrincipal(fluxo));
+        } catch (Exception e) {
+            log.warn("Erro ao buscar URL do documento para fluxo {}: {}", fluxo.getId(), e.getMessage());
+        }
+
         return dto;
+    }
+
+    /**
+     * Busca a URL assinada do documento principal do fluxo.
+     * Prioriza o primeiro arquivo da versão atual.
+     */
+    private String buscarUrlDocumentoPrincipal(Fluxo fluxo) throws IOException {
+        // Buscar versão atual
+        Optional<Versao> versaoOpt = versaoRepository.findByFluxoIdAndNumero(fluxo.getId(), fluxo.getVersaoAtual());
+        if (versaoOpt.isEmpty()) {
+            return null;
+        }
+
+        // Buscar arquivos da versão
+        List<Arquivo> arquivos = arquivoRepository.findByVersaoId(versaoOpt.get().getId());
+        if (arquivos.isEmpty()) {
+            return null;
+        }
+
+        // Priorizar: index.html > primeiro .html > primeiro .pdf > primeiro arquivo
+        Arquivo arquivoPrincipal = arquivos.stream()
+                .filter(a -> a.getNomeOriginal().equalsIgnoreCase("index.html"))
+                .findFirst()
+                .orElseGet(() -> arquivos.stream()
+                        .filter(a -> a.getNomeOriginal().toLowerCase().endsWith(".html"))
+                        .findFirst()
+                        .orElseGet(() -> arquivos.stream()
+                                .filter(a -> a.getNomeOriginal().toLowerCase().endsWith(".pdf"))
+                                .findFirst()
+                                .orElse(arquivos.get(0))));
+
+        return arquivoService.getSignedUrl(arquivoPrincipal.getCaminhoSupabase());
     }
 }

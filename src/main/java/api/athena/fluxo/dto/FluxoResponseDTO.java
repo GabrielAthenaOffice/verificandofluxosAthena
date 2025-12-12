@@ -20,4 +20,5 @@ public class FluxoResponseDTO {
     private List<String> tags;
     private LocalDateTime criadoEm;
     private LocalDateTime atualizadoEm;
+    private String documentoUrl; // URL assinada do documento principal
 }
